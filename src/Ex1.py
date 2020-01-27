@@ -2,12 +2,14 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib import image
-import tensorflow as tf
+# import tensorflow as tf
 import cv2 # --------------------- need to have OpenCV installed for the descriptor matcher
 #from sklearn.metrics import confusion_matrix
-import seaborn as sn
-import pandas as pd
+# import seaborn as sn
+# import pandas as pd
 
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 dataset_folders = ['coarse', 'fine', 'real']
 class_folders = ['ape', 'benchvise', 'cam', 'cat', 'duck']
@@ -111,6 +113,94 @@ def get_datasets():
         
     '''missing normalization of the RGB channels'''
     return np.array(S_train_images), np.array(S_train_poses), np.array(S_test_images), np.array(S_test_poses), np.array(S_db_images), np.array(S_db_poses)
+
+
+def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=False):
+    # initialize empty lists to generate triplets
+    triplet_images = []
+    triplet_poses = []
+    
+    num_class, num_images = train_images.shape[0:2]
+    train_size = num_class * num_images
+
+    for j in range(train_size):
+        diff_min = 10^8
+        idx = 0
+        # generate random indices
+        random_class = np.random.randint(0, len(train_images))
+        random_Img = np.random.randint(0, len(train_images[0]))
+        # save random anchor image of the train database
+        anchor_image = train_images[random_class][random_Img]
+        anchor_pose = train_poses[random_class][random_Img]
+        
+        # find closest image of the S_db of the same class
+        for i in range(len(db_images[random_class])):
+            # find closest pose using given formular
+            diff = 2*np.arccos(np.abs(np.dot(anchor_pose, db_poses[random_class][i])))
+            if (diff != 0.0 and diff < diff_min):
+                diff_min = diff
+                idx = i
+
+        puller_image = db_images[random_class][idx]
+        puller_pose = db_poses[random_class][idx]
+        
+        # take randomly another class
+        pusher_class = (random_class + np.random.randint(1, len(db_images)-1))%len(db_images)
+        # take randomly an image of the class
+        pusher_idx = np.random.randint(0, len(db_images))
+        pusher_image = db_images[pusher_class][pusher_idx]
+        pusher_pose = db_poses[pusher_class][pusher_idx]
+
+        triplet_images.append([anchor_image, puller_image, pusher_image])
+        triplet_poses.append([anchor_pose, puller_pose, pusher_pose])
+        
+        ## Plot the Anchor, Puller pusher if wanted
+        if plot:
+            fig = plt.figure()
+            for i in range(3):
+                fig.add_subplot(1, 3, i + 1)
+                img = triplet_images[j][i]
+                plt.imshow(img)
+            plt.show()
+            
+    '''NOTE: delete anchor_image and pose of S_train_images and S_train_poses locally --> not the same pic twice'''
+    # train_size * 3 x Height x Width x Channel
+    return np.array(triplet_images)
+
+class CustomDataset(Dataset):
+
+    def __init__(self, build=False):
+        self.train_triplets = self.S_train_images = self.S_train_poses = self.S_test_images = self.S_test_poses = self.S_db_images = self.S_db_poses = None
+
+        if build:
+            print("Building the dataset...")
+            
+            print("Fetching images and poses...")
+            self.S_train_images, self.S_train_poses, self.S_test_images, self.S_test_poses, self.S_db_images, self.S_db_poses = get_datasets()
+            print("Images and poses fetched.")
+
+            print("Generating all triplets for training...")
+            self.train_triplets = generate_all_triplets(self.S_train_images, self.S_train_poses, self.S_db_images, self.S_db_poses)
+            print("All triplets generated.")
+            
+            print("Saving dataset...")
+            np.savez("data.npz", train_triplets=self.train_triplets, S_train_images=self.S_train_images, S_train_poses=self.S_train_poses, 
+                     S_test_images=self.S_test_images, S_test_poses=self.S_test_poses, S_db_images=self.S_db_images, S_db_poses=self.S_db_poses)
+            print("Dataset saved.")
+
+        else:
+            print("Loading dataset...")
+            data = np.load("data.npz")
+            self.train_triplets, self.S_train_images, self.S_train_poses, self.S_test_images, self.S_test_poses, self.S_db_images, self.S_db_poses = data.values()
+            print("Dataset loaded.")
+
+    def __len__(self):
+        return self.train_triplets.shape[0]
+
+    def __getitem__(self, idx):
+        anchor, pusher, puller = self.train_triplets[idx]
+        return (anchor, pusher, puller)
+
 
 
 def batch_generator(train_images, train_poses, db_images, db_poses, batch_size, plot = False):
