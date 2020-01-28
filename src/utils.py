@@ -14,7 +14,7 @@ dataset_folders = ['coarse', 'fine', 'real']
 class_folders = ['ape', 'benchvise', 'cam', 'cat', 'duck']
 dataset_types = ["train", "db", "test"]
 
-def convert_full_batch(data):
+def convert_full_batch_images(data):
     num_class, num_images, H, W, C = data.shape
     full_batch = np.reshape(data, (-1, H, W, C))
     
@@ -23,6 +23,11 @@ def convert_full_batch(data):
         labels = np.hstack((labels, np.full(num_images, i)))
 
     return full_batch, labels
+
+def convert_full_batch_poses(data):
+    num_class, num_images, poses = data.shape
+    full_batch = np.reshape(data, (-1, poses))
+    return full_batch
 
 def get_images(dataset):
     class_index = 0
@@ -174,45 +179,83 @@ def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=F
 
 class CustomDataset(Dataset):
 
-    def __init__(self, type="train", build=False, load=False):
-        self.train_triplets = self.S_train_images = self.S_train_poses = self.S_test_images = self.S_test_poses = self.S_db_images = self.S_db_poses = None
+    def __init__(self, type="train", build=False, copy_from=None):
+        self.train_triplets = self.S_train_images = self.S_train_poses\
+            = self.S_test_images = self.S_test_poses = self.S_test_labels\
+            = self.S_db_images = self.S_db_poses = self.S_db_labels = None
+
         self.type = type
         if self.type not in dataset_types:
             raise "ERROR: Unknown dataset type!"
 
-        if build:
-            print("Building the dataset...")
-            
-            print("Fetching images and poses...")
-            self.S_train_images, self.S_train_poses, self.S_test_images, self.S_test_poses, self.S_db_images, self.S_db_poses = get_datasets()
-            print("Images and poses fetched.")
+        if not copy_from:
+            # Build datasets from scratch
+            if build:
+                print("Building the dataset...")
+                
+                print("Fetching images and poses...")
+                self.S_train_images, self.S_train_poses, self.S_test_images, self.S_test_poses, self.S_db_images, self.S_db_poses = get_datasets()
+                print("Images and poses fetched.")
 
-            print("Generating all triplets for training...")
-            self.train_triplets = generate_all_triplets(self.S_train_images, self.S_train_poses, self.S_db_images, self.S_db_poses)
-            print("All triplets generated.")
-            
-            print("Saving dataset...")
-            np.savez("data.npz", train_triplets=self.train_triplets, S_train_images=self.S_train_images, S_train_poses=self.S_train_poses, 
-                     S_test_images=self.S_test_images, S_test_poses=self.S_test_poses, S_db_images=self.S_db_images, S_db_poses=self.S_db_poses)
-            print("Dataset saved.")
+                print("Generating all triplets for training...")
+                self.train_triplets = generate_all_triplets(self.S_train_images, self.S_train_poses, self.S_db_images, self.S_db_poses)
+                print("All triplets generated.")
 
-        elif load:
-            print("Loading dataset...")
-            data = np.load("data.npz")
-            self.train_triplets, self.S_train_images, self.S_train_poses, self.S_test_images, self.S_test_poses, self.S_db_images, self.S_db_poses = data.values()
-            print("Dataset loaded.")
+                # Remove extra class dimensions from datasets, store class information on a separate array
+                self.S_test_images, self.S_test_labels = convert_full_batch_images(self.S_test_images)
+                self.S_test_poses = convert_full_batch_poses(self.S_test_poses)
 
-        if self.type == "train":
-            self.train_triplets = np.transpose(self.train_triplets, (0, 3, 1, 2)) # NxHxWxC -> NxCxHxW
-        # TODO: convert the rest accordingly
+                self.S_db_images, self.S_db_labels = convert_full_batch_images(self.S_db_images)
+                self.S_db_poses = convert_full_batch_poses(self.S_db_poses)
+
+                # Reposition channel axis according to PyTorch convention
+                self.adjust_channel_axis()
+                
+                print("Saving dataset...")
+                np.savez("data.npz", 
+                        train_triplets=self.train_triplets, S_train_images=self.S_train_images, S_train_poses=self.S_train_poses, 
+                        S_test_images=self.S_test_images, S_test_labels=self.S_test_labels, S_test_poses=self.S_test_poses, 
+                        S_db_images=self.S_db_images, S_db_labels=self.S_db_labels, S_db_poses=self.S_db_poses)
+                print("Dataset saved.")
+
+            # Load from a file
+            else: 
+                print("Loading dataset...")
+                data = np.load("data.npz")
+                self.train_triplets, self.S_train_images, self.S_train_poses,\
+                self.S_test_images, self.S_test_labels, self.S_test_poses,\
+                self.S_db_images, self.S_db_labels, self.S_db_poses = data.values()
+                print("Dataset loaded.")
+
+        # Load from an object
+        else:
+            self.data_copy(copy_from)
+
+    def print_datasets(self):
+        print("Training triplets: ", self.train_triplets.shape, "\n",
+              "Training images: ", self.S_train_images.shape, "\n",
+              "Training poses: ", self.S_train_poses.shape, "\n",
+              "Test images: ", self.S_test_images.shape, "\n",
+              "Test labels: ", self.S_test_labels.shape, "\n",
+              "Test poses: ", self.S_test_poses.shape, "\n",
+              "DB images: ", self.S_db_images.shape, "\n",
+              "DB labels: ", self.S_db_labels.shape, "\n",
+              "DB poses: ", self.S_db_poses.shape, sep="")
+
+    def adjust_channel_axis(self):
+        self.train_triplets = np.transpose(self.train_triplets, (0, 3, 1, 2)) # NxHxWxC -> NxCxHxW
+        self.S_db_images = np.transpose(self.S_db_images, (0, 3, 1, 2))       # NxHxWxC -> NxCxHxW
+        self.S_test_images = np.transpose(self.train_triplets, (0, 3, 1, 2))  # NxHxWxC -> NxCxHxW
 
     def data_copy(self, obj):
         self.train_triplets = obj.train_triplets
         self.S_train_images = obj.S_train_images
         self.S_train_poses = obj.S_train_poses
         self.S_test_images = obj.S_test_images
+        self.S_test_labels = obj.S_test_labels
         self.S_test_poses = obj.S_test_poses
         self.S_db_images = obj.S_db_images
+        self.S_db_labels = obj.S_db_labels
         self.S_db_poses = obj.S_db_poses
 
     def __len__(self):

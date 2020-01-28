@@ -13,24 +13,16 @@ LABELS = {
     4: "duck"
 }
 
-def get_histogram():
-    pass
-"""
-    gt_data, gt_labels = convert_full_batch(S_db_images)
-    test_data, test_labels = convert_full_batch(S_test_images)
-
-    print("GT data:", gt_data.shape)
-    print("Test data:", test_data.shape)
-
-    gt_preds = test_model.predict(gt_data, batch_size=32)
-    test_preds = test_model.predict(test_data, batch_size=32)
-
-    print("G preds:", gt_preds.shape)
-    print("Test preds:", test_preds.shape)
+def get_histogram(model, ...):
+    model.eval()
+    gt_preds = model()
+    test_preds = model()
 
     bf = cv2.BFMatcher()
     matches = bf.match(test_preds, gt_preds)              # BFMatcher finds exactly one match for each query from test_preds
     matches = sorted(matches, key = lambda x: x.queryIdx) # queryIdx refers to index of test_preds, trainIdx refers to index of gt_preds
+
+    # TODO: Accuracy calculation will be removed
     correct = 0.0
     total = len(matches)
     for match in matches:
@@ -40,14 +32,16 @@ def get_histogram():
         correct += test_labels[match.queryIdx] == gt_labels[match.trainIdx]
     acc = correct / total
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))
+    
     # TODO: 
+    # hist = np.zeros(4)
     # if test_labels[match.queryIdx] == gt_labels[match.trainIdx]
     # -> abs(S_test_poses[match.queryIdx]-S_db_poses[match.trainIdx]) NOTE: S_test_poses -> (5, 707, 4) S_db_poses -> (5, 267, 4)
     # if < 10 hist[0]++
     # if < 20 hist[1]++
     # if < 40 hist[2]++
     # if < 180 hist[3]++
-"""
+    model.train()
 
 def train(model, optim, loss_fn, device, 
           train_loader, db_loader, test_loader, 
@@ -103,21 +97,19 @@ def train(model, optim, loss_fn, device,
             global_iter_count += 1
 
 def main():
-    train_dataset = CustomDataset(type="train", build=BUILD_DATASET, load=(not BUILD_DATASET))
+    train_dataset = CustomDataset(type="train", build=BUILD_DATASET)
     train_loader = DataLoader(train_dataset, 
                               batch_size=BATCH_SIZE*3,
                               shuffle=False, 
                               num_workers=4)
 
-    db_dataset = CustomDataset(type="db", build=False, load=False) # Do not build or load
-    db_dataset.data_copy(train_dataset)  # Instead, take relevant parts from train_dataset without recomputing
+    db_dataset = CustomDataset(type="db", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     db_loader = DataLoader(db_dataset, 
                            batch_size=BATCH_SIZE,
                            shuffle=False,
                            num_workers=4)
 
-    test_dataset = CustomDataset(type="test", build=False, load=False) # Do not build or load
-    test_dataset.data_copy(train_dataset) # Instead, take relevant parts from train_dataset without recomputing
+    test_dataset = CustomDataset(type="test", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     test_loader = DataLoader(test_dataset, 
                              batch_size=BATCH_SIZE,
                              shuffle=False, 
@@ -125,12 +117,8 @@ def main():
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device in use:", device)
-    print('Length of train dataset: ', len(train_dataset))
-    print("Training batch count:", len(train_loader))
-    print('Length of DB dataset: ', len(db_dataset))
-    print("DB batch count:", len(db_loader))
-    print('Length of test dataset: ', len(test_dataset))
-    print("Test batch count:", len(test_loader))
+
+    train_dataset.print_datasets()
 
     model = TripletNet()
     model.to(device)
