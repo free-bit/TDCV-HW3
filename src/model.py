@@ -7,8 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class TripletNet(nn.Module):
 
@@ -16,7 +14,7 @@ class TripletNet(nn.Module):
     super(TripletNet, self).__init__()
     # Layers
     self.layers = nn.Sequential(
-      # TODO: Check the location of channel dimension in torch!!!
+      # NOTE: Input format: NxCxHxW
       nn.Conv2d(in_channels=3, out_channels=16, kernel_size=(8,8)),
       nn.ReLU(),
       nn.MaxPool2d(kernel_size=(2, 2), stride=2),
@@ -35,33 +33,19 @@ class TripletNet(nn.Module):
 
 # TODO: Check here!
 def triplet_pair_loss(triplet_batch):
-  batch_size = triplet_batch.shape[0]
+  batch_size = triplet_batch.shape[0]      # BS: batch_size
   diff_pos = triplet_batch[0:batch_size:3] - triplet_batch[1:batch_size:3]
   diff_neg = triplet_batch[0:batch_size:3] - triplet_batch[2:batch_size:3]
-  dist_pos = torch.sum(diff_pos**2)
-  dist_neg = torch.sum(diff_neg**2)
+  dist_pos = torch.sum(diff_pos**2, dim=1) # BSx16 -> BSx1
+  dist_neg = torch.sum(diff_neg**2, dim=1) # BSx16 -> BSx1
 
   m = 0.01
   ratio = dist_neg / (dist_pos + m)
-  max_values, _ = torch.max((1.0-ratio), 0)
-  triplet_loss = torch.sum(max_values)
-  pair_loss = torch.sum(dist_pos)
+  max_values = torch.clamp((1.0-ratio), min=0) # BSx1 -> BSx1
+  triplet_loss = torch.sum(max_values, dim=0)  # BSx1 -> 1x1
+  pair_loss = torch.sum(dist_pos, dim=0)
 
   return triplet_loss + pair_loss
-
-# def triplet_pair_loss(triplet_batch):
-#   batch_size = triplet_batch.shape[0]
-#   diff_pos = triplet_batch[0:batch_size:3] - triplet_batch[1:batch_size:3]
-#   diff_neg = triplet_batch[0:batch_size:3] - triplet_batch[2:batch_size:3]
-#   dist_pos = tf.nn.l2_loss(diff_pos) * 2
-#   dist_neg = tf.nn.l2_loss(diff_neg) * 2
-
-#   m = 0.01
-#   ratio = dist_neg / (dist_pos + m)
-#   triplet_loss = tf.reduce_sum(tf.maximum(0.0, (1.0-ratio)))
-#   pair_loss = tf.reduce_sum(dist_pos)
-
-#   return triplet_loss + pair_loss
 
 def normalize(tensor):
   """Perform zero mean - unit variance normalization of each channel of input of the form: HxWxC."""

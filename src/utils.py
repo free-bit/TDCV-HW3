@@ -2,7 +2,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib import image
-import cv2 # --------------------- need to have OpenCV installed for the descriptor matcher
+import cv2
 #from sklearn.metrics import confusion_matrix
 # import seaborn as sn
 # import pandas as pd
@@ -13,6 +13,16 @@ from torch.utils.data import Dataset, DataLoader
 dataset_folders = ['coarse', 'fine', 'real']
 class_folders = ['ape', 'benchvise', 'cam', 'cat', 'duck']
 dataset_types = ["train", "db", "test"]
+
+def convert_full_batch(data):
+    num_class, num_images, H, W, C = data.shape
+    full_batch = np.reshape(data, (-1, H, W, C))
+    
+    labels = np.array([])
+    for i in range(num_class):
+        labels = np.hstack((labels, np.full(num_images, i)))
+
+    return full_batch, labels
 
 def get_images(dataset):
     class_index = 0
@@ -85,7 +95,7 @@ def get_datasets():
             i = int(i)
             training_split_indices.append(i)
     
-    # split real images
+    # distribute real images into train and test datasets with respect to split indices
     for i in range(len(images_real[0])):
         # image belongs to training set
         if i in training_split_indices:
@@ -99,16 +109,12 @@ def get_datasets():
                 S_test_images[j].append(images_real[j][i])
                 S_test_poses[j].append(poses_real[j][i])
 
-    # split fine images
-    for i in range(len(images_fine[0])):
-        # image belongs to training set
-        if i in training_split_indices:
-            #print('yes')
-            for j in range(len(images_fine)):
-                S_train_images[j].append(images_fine[j][i])
-                S_train_poses[j].append(poses_fine[j][i])
-                
-                
+    # append all fine images to train dataset
+    num_classes = len(images_fine)
+    # Take all images under i-th class from the "fine" set and extend the corresponding class under train dataset with them
+    for i in range(num_classes):
+        S_train_images[i].extend(images_fine[i])
+        S_train_poses[i].extend(poses_fine[i])
         
     '''missing normalization of the RGB channels'''
     return np.array(S_train_images), np.array(S_train_poses), np.array(S_test_images), np.array(S_test_poses), np.array(S_db_images), np.array(S_db_poses)

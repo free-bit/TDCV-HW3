@@ -1,6 +1,5 @@
 from model import *
-from Ex1 import *
-import cv2
+from utils import *
 
 BUILD_DATASET = False
 BATCH_SIZE = 8
@@ -13,100 +12,9 @@ LABELS = {
     3: "cat",
     4: "duck"
 }
-def convert_full_batch(data):
-    num_class, num_images, H, W, C = data.shape
-    full_batch = np.reshape(data, (-1, H, W, C))
-    
-    labels = np.array([])
-    for i in range(num_class):
-        labels = np.hstack((labels, np.full(num_images, i)))
 
-    return full_batch, labels
-
-def train(model, optim, loss_fn, device, 
-          train_loader, db_loader, test_loader, 
-          num_epochs=10, log_at=10, draw_hist_at=1000):
-    
-    total_iter = len(train_loader)
-
-    for epoch in range(1, num_epochs+1):
-        print("[Epoch {}/{}]".format(epoch, num_epochs))
-        for iter, batch in enumerate(train_loader, 1):
-            batch.to(device)
-
-            # TODO: For testing purposes
-            # fig = plt.figure()
-            # fig.add_subplot(1, 3, 1)
-            # plt.imshow(batch[0])
-
-            # fig.add_subplot(1, 3, 2)
-            # plt.imshow(batch[1])
-            
-            # fig.add_subplot(1, 3, 3)
-            # plt.imshow(batch[2])
-            # plt.show()
-
-            # fig = plt.figure()
-            # fig.add_subplot(1, 3, 1)
-            # plt.imshow(batch[3])
-
-            # fig.add_subplot(1, 3, 2)
-            # plt.imshow(batch[4])
-            
-            # fig.add_subplot(1, 3, 3)
-            # plt.imshow(batch[5])
-            # plt.show()
-            # END TODO
-
-            optim.zero_grad()                                 # Clear gradients
-            preds = model(batch)                              # Get predictions
-            loss = loss_fn(preds)                             # Calculate triplet-pair loss
-            loss.backward()                                   # Backpropagation
-            optim.step()                                      # Optimize parameters based on backpropagation
-            # self.train_loss_history.append(loss.item())     # Store loss for each batch
-
-            # Logging in log_at iteration
-            if iter % log_at == 0:
-                print("[Iteration {}/{}] TRAIN loss: {}".format(iter, total_iter, loss.item()))
-            # Drawing histogram in draw_hist_at iteration
-            # TODO:
-
-def main():
-    train_dataset = CustomDataset(type="train", build=BUILD_DATASET, load=(not BUILD_DATASET))
-    train_loader = DataLoader(train_dataset, 
-                              batch_size=BATCH_SIZE*3,
-                              shuffle=False, 
-                              num_workers=4)
-
-    db_dataset = CustomDataset(type="db", build=False, load=False) # Do not build or load
-    db_dataset.data_copy(train_dataset)  # Instead, take relevant parts from train_dataset without recomputing
-    db_loader = DataLoader(db_dataset, 
-                           batch_size=BATCH_SIZE,
-                           shuffle=False,
-                           num_workers=4)
-
-    test_dataset = CustomDataset(type="test", build=False, load=False) # Do not build or load
-    test_dataset.data_copy(train_dataset) # Instead, take relevant parts from train_dataset without recomputing
-    test_loader = DataLoader(test_dataset, 
-                             batch_size=BATCH_SIZE,
-                             shuffle=False, 
-                             num_workers=4)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print("Device in use:", device)
-    print('Length of train dataset: ', len(train_dataset))
-    print("Training batch count:", len(train_loader))
-    print('Length of DB dataset: ', len(db_dataset))
-    print("DB batch count:", len(db_loader))
-    print('Length of test dataset: ', len(test_dataset))
-    print("Test batch count:", len(test_loader))
-    model = TripletNet()
-    model.to(device)
-    print(model)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-4)
-    loss_fn = triplet_pair_loss
-
-    train(model, optim, loss_fn, device, train_loader, db_loader, test_loader)
-    return # TODO remove later
+def get_histogram():
+    pass
 """
     gt_data, gt_labels = convert_full_batch(S_db_images)
     test_data, test_labels = convert_full_batch(S_test_images)
@@ -140,5 +48,106 @@ def main():
     # if < 40 hist[2]++
     # if < 180 hist[3]++
 """
+
+def train(model, optim, loss_fn, device, 
+          train_loader, db_loader, test_loader, 
+          num_epochs=10, log_at=10, draw_hist_at=1000):
+    
+    total_iter = len(train_loader)
+    total_global_iter = total_iter * num_epochs
+    global_iter_count = 0
+
+    for epoch in range(1, num_epochs+1):
+        print("[Epoch {}/{}]".format(epoch, num_epochs))
+        for iter, batch in enumerate(train_loader, 1):
+            batch = batch.to(device)
+
+            # TODO: For testing purposes
+            # fig = plt.figure()
+            # fig.add_subplot(1, 3, 1)
+            # plt.imshow(batch[0])
+
+            # fig.add_subplot(1, 3, 2)
+            # plt.imshow(batch[1])
+            
+            # fig.add_subplot(1, 3, 3)
+            # plt.imshow(batch[2])
+            # plt.show()
+
+            # fig = plt.figure()
+            # fig.add_subplot(1, 3, 1)
+            # plt.imshow(batch[3])
+
+            # fig.add_subplot(1, 3, 2)
+            # plt.imshow(batch[4])
+            
+            # fig.add_subplot(1, 3, 3)
+            # plt.imshow(batch[5])
+            # plt.show()
+            # END TODO
+
+            optim.zero_grad()                             # Clear gradients
+            preds = model(batch)                          # Get predictions
+            loss = loss_fn(preds)                         # Calculate triplet-pair loss
+            loss.backward()                               # Backpropagation
+            optim.step()                                  # Optimize parameters based on backpropagation
+            # self.train_loss_history.append(loss.item()) # Store loss for each batch
+
+            # Logging in log_at iteration
+            if iter % log_at == 0:
+                print("[Iteration {}/{}] loss: {}".format(iter, total_iter, loss.item()))
+            # Drawing histogram in draw_hist_at iteration
+            if global_iter_count % draw_hist_at == 0:
+                print("[Total iterations {}/{}] loss: {}".format(global_iter_count, total_global_iter, loss.item()))
+                # TODO:
+            global_iter_count += 1
+
+def main():
+    train_dataset = CustomDataset(type="train", build=BUILD_DATASET, load=(not BUILD_DATASET))
+    train_loader = DataLoader(train_dataset, 
+                              batch_size=BATCH_SIZE*3,
+                              shuffle=False, 
+                              num_workers=4)
+
+    db_dataset = CustomDataset(type="db", build=False, load=False) # Do not build or load
+    db_dataset.data_copy(train_dataset)  # Instead, take relevant parts from train_dataset without recomputing
+    db_loader = DataLoader(db_dataset, 
+                           batch_size=BATCH_SIZE,
+                           shuffle=False,
+                           num_workers=4)
+
+    test_dataset = CustomDataset(type="test", build=False, load=False) # Do not build or load
+    test_dataset.data_copy(train_dataset) # Instead, take relevant parts from train_dataset without recomputing
+    test_loader = DataLoader(test_dataset, 
+                             batch_size=BATCH_SIZE,
+                             shuffle=False, 
+                             num_workers=4)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("Device in use:", device)
+    print('Length of train dataset: ', len(train_dataset))
+    print("Training batch count:", len(train_loader))
+    print('Length of DB dataset: ', len(db_dataset))
+    print("DB batch count:", len(db_loader))
+    print('Length of test dataset: ', len(test_dataset))
+    print("Test batch count:", len(test_loader))
+
+    model = TripletNet()
+    model.to(device)
+    print(model)
+    
+    optim = torch.optim.Adam(model.parameters(), lr=1e-4)
+    loss_fn = triplet_pair_loss
+
+    train(model, optim, loss_fn, device, train_loader, db_loader, test_loader, num_epochs=2)
+
+    if not os.path.exists("../models"):
+        os.makedirs('../models')
+    torch.save(model, "../models/triplet.model")
+    #model = torch.load('../models/triplet.model')
+
+
+    return # TODO remove later
+
 if __name__ == "__main__":
     main()
