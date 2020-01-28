@@ -232,7 +232,8 @@ class CustomDataset(Dataset):
             self.data_copy(copy_from)
 
     def print_datasets(self):
-        print("Training triplets: ", self.train_triplets.shape, "\n",
+        print("Size information for datasets:\n",
+              "Training triplets: ", self.train_triplets.shape, "\n",
               "Training images: ", self.S_train_images.shape, "\n",
               "Training poses: ", self.S_train_poses.shape, "\n",
               "Test images: ", self.S_test_images.shape, "\n",
@@ -245,7 +246,7 @@ class CustomDataset(Dataset):
     def adjust_channel_axis(self):
         self.train_triplets = np.transpose(self.train_triplets, (0, 3, 1, 2)) # NxHxWxC -> NxCxHxW
         self.S_db_images = np.transpose(self.S_db_images, (0, 3, 1, 2))       # NxHxWxC -> NxCxHxW
-        self.S_test_images = np.transpose(self.train_triplets, (0, 3, 1, 2))  # NxHxWxC -> NxCxHxW
+        self.S_test_images = np.transpose(self.S_test_images, (0, 3, 1, 2))   # NxHxWxC -> NxCxHxW
 
     def data_copy(self, obj):
         self.train_triplets = obj.train_triplets
@@ -261,19 +262,19 @@ class CustomDataset(Dataset):
     def __len__(self):
         if self.type == "train":
             return self.train_triplets.shape[0]
-        elif self.type == "db":
-            return self.S_db_images.shape[0]
         elif self.type == "test":
             return self.S_test_images.shape[0]
+        elif self.type == "db":
+            return self.S_db_images.shape[0]
         else:
             raise "ERROR: Unknown dataset type!"
 
     def __getitem__(self, idx):
         if self.type == "train":
             return self.train_triplets[idx] # idx: 0, 1, 2... [0: anchor0, 1: puller0, 2: pusher0, 3: anchor1, 4: puller1, 5: pusher1...]
-        elif self.type == "db":
-            return self.S_db_images[idx], self.S_db_poses[idx] # TODO: Get rid of top level axis
         elif self.type == "test":
-            return self.S_test_images[idx], self.S_test_poses[idx] # TODO: Get rid of top level axis
+            return self.S_test_images[idx], self.S_test_labels[idx], self.S_test_poses[idx]
+        elif self.type == "db":
+            return self.S_db_images[idx], self.S_db_labels[idx], self.S_db_poses[idx]
         else:
             raise "ERROR: Unknown dataset type!"
