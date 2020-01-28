@@ -1,8 +1,6 @@
 import numpy as np
 # import seaborn as sns
 import matplotlib.pyplot as plt
-# import tensorflow as tf
-# from tensorflow.keras import Model, layers, optimizers, datasets, models, Sequential
 import sys
 
 import torch
@@ -18,6 +16,7 @@ class TripletNet(nn.Module):
     super(TripletNet, self).__init__()
     # Layers
     self.layers = nn.Sequential(
+      # TODO: Check the location of channel dimension in torch!!!
       nn.Conv2d(in_channels=3, out_channels=16, kernel_size=(8,8)),
       nn.ReLU(),
       nn.MaxPool2d(kernel_size=(2, 2), stride=2),
@@ -34,9 +33,8 @@ class TripletNet(nn.Module):
     x = self.layers(x)
     return x
 
-
+# TODO: Check here!
 def triplet_pair_loss(triplet_batch):
-  # print("Triplet:", triplet_batch.size())
   batch_size = triplet_batch.shape[0]
   diff_pos = triplet_batch[0:batch_size:3] - triplet_batch[1:batch_size:3]
   diff_neg = triplet_batch[0:batch_size:3] - triplet_batch[2:batch_size:3]
@@ -64,26 +62,6 @@ def triplet_pair_loss(triplet_batch):
 #   pair_loss = tf.reduce_sum(dist_pos)
 
 #   return triplet_loss + pair_loss
-
-#def test_function(test_dataset, database, model):
-    
-
-# @tf.function
-# def train(model, dataset, optimizer):
-#   batch_count = dataset.shape[0]
-#   loss_history = []
-#   histograms = []
-#   for i in range(batch_count):
-#     with tf.GradientTape() as tape:
-#       preds = model(dataset[i], training=True)
-#       loss = triplet_pair_loss(preds)
-#       # loss_history.append(loss)
-#       tf.print("Loss:", loss, output_stream = sys.stdout)
-#       #print("[Iteration: {}, Loss: {}]".format(i, loss))
-#     if (i % 1000) == 0:
-#       pass
-#     gradients = tape.gradient(loss, model.trainable_variables)
-#     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 def normalize(tensor):
   """Perform zero mean - unit variance normalization of each channel of input of the form: HxWxC."""
