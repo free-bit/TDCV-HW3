@@ -11,6 +11,10 @@ class_folders = ['ape', 'benchvise', 'cam', 'cat', 'duck']
 dataset_types = ["train", "db", "test"]
 
 def convert_full_batch_images(data):
+    '''
+    Collapse input axis such that: CLSxNxHxWxC->(CLS*N)xHxWxC.
+    Return full-batch of images and labels corresponding to each image of shapes: (CLS*N)xHxWxC, ((CLS*N),) respectively.
+    '''
     num_class, num_images, H, W, C = data.shape
     full_batch = np.reshape(data, (-1, H, W, C))
     
@@ -21,11 +25,19 @@ def convert_full_batch_images(data):
     return full_batch, labels
 
 def convert_full_batch_poses(data):
+    '''
+    Collapse input axis such that: CLSxNx4->(CLS*N)x4.
+    Return full-batch of poses of shape: (CLS*N)x4.
+    '''
     num_class, num_images, poses = data.shape
     full_batch = np.reshape(data, (-1, poses))
     return full_batch
 
 def get_images(dataset):
+    '''
+    Read all images under given folder.
+    Return an array of images of the shape: CLSxNxHxWxC.
+    '''
     class_index = 0
     # Iterate over all classes
     imag = list()
@@ -47,6 +59,10 @@ def get_images(dataset):
     return imag
 
 def get_poses(dataset):
+    '''
+    Read all pose information under given folder.
+    Return an array of poses of the shape: CLSxNx4.
+    '''
     class_index = 0
     # Iterate over all classes
     poses = list()
@@ -66,6 +82,10 @@ def get_poses(dataset):
     return poses
 
 def get_datasets():
+    '''
+    Retrieve all images and corresponding poses.
+    Return separate arrays of images and poses for train, test and db datasets with shapes: CLSxNxHxWxC and CLSxNx4 respectively.
+    '''
     images_real = get_images('real')
     poses_real = get_poses('real')
     images_coarse = get_images('coarse')
@@ -117,16 +137,27 @@ def get_datasets():
 
 
 def shuffle_triplets(triplets):
+    '''
+    Shuffle generated triplets.
+    Return shuffled array of triplets.
+    '''
     tmp = list()
     num_triplets = int(len(triplets)/3)   
     for i in range(num_triplets):
-        tmp.append([triplets[3*i], triplets[3*i+1], triplets[3*i+2]])   
+        tmp.append([triplets[3*i], triplets[3*i+1], triplets[3*i+2]]) # Zip triplets (which are in flattened form)
     tmp = np.array(tmp)
-    np.random.shuffle(tmp)
-    tmp = np.reshape(tmp, (-1, 64, 64, 3))   
+    np.random.shuffle(tmp) # Shuffle array of triplets
+    tmp = np.reshape(tmp, (-1, 64, 64, 3)) # Flatten zipped triplets
     return tmp
 
 def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=False):
+    '''
+    Generate all triplets such that:
+    - Every triplet is group of three images: (a, +, -)
+    - Resulting array of triplets is of form: np.array([a_0, +_0, -_0, a_1, +_1, -_1...])
+    - Array of triplets is shuffled after creation.
+    Return array of shape: (CLS*N*3)xHxWxC.
+    '''
     # Initialize empty lists to generate triplets
     triplet_images = []
     triplet_poses = []
@@ -178,7 +209,13 @@ def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=F
     return np.array(triplet_images)
 
 class CustomDataset(Dataset):
-
+    '''
+    Custom dataset class that is used for train, test and db datasets.
+    type parameter determines the dataset type. Possible values: train, test, db
+    build parameter determines whether triplets (and other data) shall be constructed from the datasets anew or be loaded from a file.
+    copy_from is used to copy the data from another CustomDataset object instance. 
+    e.g. one CustomDataset for train is constructed, the attributes can be passed over to CustomDataset instances for test and db.
+    '''
     def __init__(self, type="train", build=False, copy_from=None):
         self.train_triplets = self.S_train_images = self.S_train_poses\
             = self.S_test_images = self.S_test_poses = self.S_test_labels\
@@ -188,6 +225,7 @@ class CustomDataset(Dataset):
         if self.type not in dataset_types:
             raise "ERROR: Unknown dataset type!"
 
+        # Check whether or not there is a CustomDataset object instance provided to copy the dataset from
         if not copy_from:
             # Build datasets from scratch
             if build:
@@ -208,7 +246,7 @@ class CustomDataset(Dataset):
                 self.S_db_images, self.S_db_labels = convert_full_batch_images(self.S_db_images)
                 self.S_db_poses = convert_full_batch_poses(self.S_db_poses)
 
-                # Reposition channel axis according to PyTorch convention
+                # Reposition channel axis according to PyTorch convention: NxCxHxW
                 self.adjust_channel_axis()
                 
                 print("Saving dataset...")
@@ -218,7 +256,7 @@ class CustomDataset(Dataset):
                         S_db_images=self.S_db_images, S_db_labels=self.S_db_labels, S_db_poses=self.S_db_poses)
                 print("Dataset saved.")
 
-            # Load from a file
+            # Load dataset from a file
             else:
                 # NOTE: Do not assume a specific order for keys in python dicts!
                 print("Loading dataset...")
@@ -234,11 +272,12 @@ class CustomDataset(Dataset):
                 self.S_db_poses = data["S_db_poses"]
                 print("Dataset loaded.")
 
-        # Load from an object
+        # Load from a CustomDataset object instance
         else:
             self.data_copy(copy_from)
 
     def print_datasets(self):
+        '''Print size information for every dataset array'''
         print("Size information for datasets:\n",
               "Training triplets: ", self.train_triplets.shape, "\n",
               "Training images: ", self.S_train_images.shape, "\n",
@@ -251,11 +290,13 @@ class CustomDataset(Dataset):
               "DB poses: ", self.S_db_poses.shape, sep="")
 
     def adjust_channel_axis(self):
+        '''Reposition channel axis according to PyTorch convention: NxCxHxW'''
         self.train_triplets = np.transpose(self.train_triplets, (0, 3, 1, 2)) # NxHxWxC -> NxCxHxW
         self.S_db_images = np.transpose(self.S_db_images, (0, 3, 1, 2))       # NxHxWxC -> NxCxHxW
         self.S_test_images = np.transpose(self.S_test_images, (0, 3, 1, 2))   # NxHxWxC -> NxCxHxW
 
     def data_copy(self, obj):
+        '''Copy the data from another CustomDataset object instance'''
         self.train_triplets = obj.train_triplets
         self.S_train_images = obj.S_train_images
         self.S_train_poses = obj.S_train_poses
@@ -267,6 +308,7 @@ class CustomDataset(Dataset):
         self.S_db_poses = obj.S_db_poses
 
     def __len__(self):
+        '''Return len() of dataset depending on the instance type'''
         if self.type == "train":
             return self.train_triplets.shape[0]
         elif self.type == "test":
@@ -277,6 +319,7 @@ class CustomDataset(Dataset):
             raise "ERROR: Unknown dataset type!"
 
     def __getitem__(self, idx):
+        '''Return item with idx depending on the instance type'''
         if self.type == "train":
             return self.train_triplets[idx] # idx: 0, 1, 2... [0: anchor0, 1: puller0, 2: pusher0, 3: anchor1, 4: puller1, 5: pusher1...]
         elif self.type == "test":
