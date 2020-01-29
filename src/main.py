@@ -27,7 +27,7 @@ def angle_between(v1, v2):
     # Get angle
     return (2*np.arccos(np.abs(np.dot(unit_v1, unit_v2)))) *180/np.pi
 
-def get_histogram(model, device, test_loader, db_loader):
+def get_histogram(model, device, test_loader, db_loader, iteration):
     model.eval()
 
     # NOTE: Due to OOM, full-batch was infeasible. Instead, mini-batches are used, with torch.no_grad() blocks added and results of batched are concatenated.
@@ -111,11 +111,8 @@ def get_histogram(model, device, test_loader, db_loader):
     plt.title("Angle histogram")
     plt.xticks(x_pos, ('<10$^\circ$', '<20$^\circ$', '<40$^\circ$', '<180$^\circ$'))
     plt.yticks(np.arange(0, np.max(hist)+1, 5.))
-    print('max_val_hist', np.max(hist))
-    
     plt.show()
-    #plt.savefig('hist_' + str(TOTAL_ITER) + '_loss_' + str(np.mean(loss_mean)) + '.png')
-    
+    # plt.savefig('hist'+ str(iteration) +'.png')
     
     model.train()
     return hist, predLabels, test_labels
@@ -132,37 +129,12 @@ def train(model, optim, loss_fn, device,
         print("[Epoch {}/{}]".format(epoch, num_epochs))
         for iter, batch in enumerate(train_loader, 1):
             batch = batch.to(device)
-
-            # TODO: For testing purposes
-            # fig = plt.figure()
-            # fig.add_subplot(1, 3, 1)
-            # plt.imshow(batch[0])
-
-            # fig.add_subplot(1, 3, 2)
-            # plt.imshow(batch[1])
-            
-            # fig.add_subplot(1, 3, 3)
-            # plt.imshow(batch[2])
-            # plt.show()
-
-            # fig = plt.figure()
-            # fig.add_subplot(1, 3, 1)
-            # plt.imshow(batch[3])
-
-            # fig.add_subplot(1, 3, 2)
-            # plt.imshow(batch[4])
-            
-            # fig.add_subplot(1, 3, 3)
-            # plt.imshow(batch[5])
-            # plt.show()
-            # END TODO
-
             optim.zero_grad()                             # Clear gradients
             preds = model(batch)                          # Get predictions
             loss = loss_fn(preds)                         # Calculate triplet-pair loss
             loss.backward()                               # Backpropagation
             optim.step()                                  # Optimize parameters based on backpropagation
-            # self.train_loss_history.append(loss.item()) # Store loss for each batch
+            # self.train_loss_history.append(loss.item())   # Store loss for each batch
 
             # Logging in log_at iteration
             if iter % log_at == 0:
@@ -171,7 +143,7 @@ def train(model, optim, loss_fn, device,
             if global_iter_count % draw_hist_at == 0:
                 print("[Total iterations {}/{}] loss: {}\n".format(global_iter_count, total_global_iter, loss.item()),
                       "Calculating histogram...", sep="")
-                get_histogram(model, device, test_loader, db_loader)[0]
+                get_histogram(model, device, test_loader, db_loader, global_iter_count)
             global_iter_count += 1
 
 def main():
@@ -214,7 +186,7 @@ def main():
         
     else:
         model = torch.load('../models/triplet.model')
-        hist, predLabels, trueClass = get_histogram(model, device, test_loader, db_loader)
+        hist, predLabels, trueClass = get_histogram(model, device, test_loader, db_loader, 0)
         
         #Check for same size of the lists
         if(len(predLabels) != len(trueClass)):
