@@ -73,7 +73,7 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     hist = np.zeros(4)
     correct = 0.0  #
     total = len(matches)
-    predLabels = []
+    pred_labels = []
     for match in matches:
         print("\nTest Index (queryIndex): {} - Actual Label for Test: {} ({})\n".format(match.queryIdx, test_labels[match.queryIdx], LABELS[test_labels[match.queryIdx]]),
                 "GT Index (trainIndex): {} - Predicted Label for Test: {} ({})\n".format(match.trainIdx, db_labels[match.trainIdx], LABELS[db_labels[match.trainIdx]]),
@@ -92,8 +92,8 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
 
             correct += 1 #
         
-        predLabels.append(db_labels[match.trainIdx])
-    predLabels = np.array(predLabels)
+        pred_labels.append(db_labels[match.trainIdx])
+    pred_labels = np.array(pred_labels)
     acc = correct / total  #
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
     print("Histogram:", hist)
@@ -111,11 +111,11 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     plt.title("Angle histogram")
     plt.xticks(x_pos, ('<10$^\circ$', '<20$^\circ$', '<40$^\circ$', '<180$^\circ$'))
     plt.yticks(np.arange(0, np.max(hist)+1, 5.))
+    plt.savefig('hist_'+ str(iteration) +'.png')
     plt.show()
-    # plt.savefig('hist'+ str(iteration) +'.png')
     
     model.train()
-    return hist, predLabels, test_labels
+    return hist, pred_labels, test_labels
 
 def train(model, optim, loss_fn, device,
           train_loader, test_loader, db_loader, 
@@ -124,27 +124,30 @@ def train(model, optim, loss_fn, device,
     total_iter = len(train_loader)
     total_global_iter = total_iter * num_epochs
     global_iter_count = 1
+    with open("loss_log.txt", "w") as file:
+        for epoch in range(1, num_epochs+1):
+            info = "[Epoch {}/{}]".format(epoch, num_epochs)
+            print(info)
+            file.write(info + "\n")
+            for iter, batch in enumerate(train_loader, 1):
+                batch = batch.to(device)
+                optim.zero_grad()                             # Clear gradients
+                preds = model(batch)                          # Get predictions
+                loss = loss_fn(preds)                         # Calculate triplet-pair loss
+                loss.backward()                               # Backpropagation
+                optim.step()                                  # Optimize parameters based on backpropagation
 
-    for epoch in range(1, num_epochs+1):
-        print("[Epoch {}/{}]".format(epoch, num_epochs))
-        for iter, batch in enumerate(train_loader, 1):
-            batch = batch.to(device)
-            optim.zero_grad()                             # Clear gradients
-            preds = model(batch)                          # Get predictions
-            loss = loss_fn(preds)                         # Calculate triplet-pair loss
-            loss.backward()                               # Backpropagation
-            optim.step()                                  # Optimize parameters based on backpropagation
-            # self.train_loss_history.append(loss.item())   # Store loss for each batch
-
-            # Logging in log_at iteration
-            if iter % log_at == 0:
-                print("[Iteration {}/{}] loss: {}".format(iter, total_iter, loss.item()))
-            # Drawing histogram in draw_hist_at iteration
-            if global_iter_count % draw_hist_at == 0:
-                print("[Total iterations {}/{}] loss: {}\n".format(global_iter_count, total_global_iter, loss.item()),
-                      "Calculating histogram...", sep="")
-                get_histogram(model, device, test_loader, db_loader, global_iter_count)
-            global_iter_count += 1
+                # Logging in log_at iteration
+                if iter % log_at == 0:
+                    info = "[Iteration {}/{}] loss: {}".format(iter, total_iter, loss.item())
+                    print(info)
+                    file.write(info + "\n")
+                # Drawing histogram in draw_hist_at iteration
+                if global_iter_count % draw_hist_at == 0:
+                    print("[Total iterations {}/{}] loss: {}\n".format(global_iter_count, total_global_iter, loss.item()),
+                        "Calculating histogram...", sep="")
+                    get_histogram(model, device, test_loader, db_loader, global_iter_count)
+                global_iter_count += 1
 
 def main():
     train_dataset = CustomDataset(type="train", build=BUILD_DATASET)
@@ -186,13 +189,13 @@ def main():
         
     else:
         model = torch.load('../models/triplet.model')
-        hist, predLabels, trueClass = get_histogram(model, device, test_loader, db_loader, 0)
+        hist, pred_labels, true_class = get_histogram(model, device, test_loader, db_loader, 0)
         
         #Check for same size of the lists
-        if(len(predLabels) != len(trueClass)):
-            print("Unequal shape for Confusion Matrix! Predictions: {}, Truth: {}".format(len(predLabels), len(trueClass)))
+        if(len(pred_labels) != len(true_class)):
+            print("Unequal shape for Confusion Matrix! Predictions: {}, Truth: {}".format(len(pred_labels), len(true_class)))
         else: # print the confusion matrix
-            cm = confusion_matrix(trueClass, predLabels)
+            cm = confusion_matrix(true_class, pred_labels)
             cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
             df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
             print(df_cm)
