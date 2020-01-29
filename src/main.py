@@ -1,12 +1,13 @@
 from model import *
 from utils import *
 
+
 BUILD_DATASET = False
 BATCH_SIZE = 32
 BATCH_SIZE_TEST = 32
 BATCH_SIZE_DB = 32
-NUM_EPOCHS = 1
-TRAIN = False
+NUM_EPOCHS = 10
+TRAIN = True
 LABELS = {
     0: "ape",
     1: "benchvise",
@@ -21,7 +22,7 @@ def angle_between(v1, v2):
     unit_v1 = v1 / np.linalg.norm(v1)
     unit_v2 = v2 / np.linalg.norm(v2)
     # Get angle
-    return np.arccos(np.abs(np.dot(unit_v1, unit_v2)))
+    return (2*np.arccos(np.abs(np.dot(unit_v1, unit_v2)))) *180/np.pi
 
 def get_histogram(model, device, test_loader, db_loader):
     model.eval()
@@ -89,6 +90,26 @@ def get_histogram(model, device, test_loader, db_loader):
     acc = correct / total  #
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
     print("Histogram:", hist)
+    
+    angle_labels = ['<10°', '<20', '<40', '<180']
+
+    sum_hist = np.sum(hist)
+    hist = hist/sum_hist*100
+    
+    x_pos = [i for i, _ in enumerate(angle_labels)]
+    plt.style.use('ggplot')
+    plt.bar(x_pos, hist, color='blue')
+    plt.xlabel("Angles, $^\circ$")
+    plt.ylabel("Percentage, %")
+    plt.title("Angle histogram")
+    plt.xticks(x_pos, ('<10$^\circ$', '<20$^\circ$', '<40$^\circ$', '<180$^\circ$'))
+    plt.yticks(np.arange(0, np.max(hist)+1, 5.))
+    print('max_val_hist', np.max(hist))
+    
+    plt.show()
+    #plt.savefig('hist_' + str(TOTAL_ITER) + '_loss_' + str(np.mean(loss_mean)) + '.png')
+    
+    
     model.train()
     return hist
 
@@ -151,19 +172,19 @@ def main():
     train_loader = DataLoader(train_dataset, 
                               batch_size=BATCH_SIZE*3,
                               shuffle=False, 
-                              num_workers=4)
+                              num_workers=0)
 
     db_dataset = CustomDataset(type="db", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     db_loader = DataLoader(db_dataset, 
                            batch_size=BATCH_SIZE_TEST,
                            shuffle=False,
-                           num_workers=4)
+                           num_workers=0)
 
     test_dataset = CustomDataset(type="test", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     test_loader = DataLoader(test_dataset, 
                              batch_size=BATCH_SIZE_DB,
                              shuffle=False, 
-                             num_workers=4)
+                             num_workers=0)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device in use:", device)
@@ -177,12 +198,16 @@ def main():
     optim = torch.optim.Adam(model.parameters(), lr=1e-4)
     loss_fn = triplet_pair_loss
 
-    train(model, optim, loss_fn, device, train_loader, test_loader, db_loader, num_epochs=5)
-
-    if not os.path.exists("../models"):
-        os.makedirs('../models')
-    torch.save(model, "../models/triplet.model")
-    #model = torch.load('../models/triplet.model')
-
+    if TRAIN:
+        train(model, optim, loss_fn, device, train_loader, test_loader, db_loader, num_epochs=NUM_EPOCHS)
+    
+        if not os.path.exists("../models"):
+            os.makedirs('../models')
+        torch.save(model, "../models/triplet.model")
+        
+    else:
+        model = torch.load('../models/triplet.model')
+        get_histogram(model, device, test_loader, db_loader)
+ 
 if __name__ == "__main__":
     main()
