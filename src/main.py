@@ -5,11 +5,11 @@ import seaborn as sn
 import pandas as pd
 
 
-BUILD_DATASET = False
+BUILD_DATASET = True
 BATCH_SIZE = 32
 BATCH_SIZE_TEST = 32
 BATCH_SIZE_DB = 32
-NUM_EPOCHS = 10
+NUM_EPOCHS = 5
 NUM_WORKERS = 0
 TRAIN = True
 LABELS = {
@@ -98,7 +98,8 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
     
     # Store histogram
-    plt.plot()
+    plt.figure(1)
+    plt.grid(axis='y')
     print("Histogram values (exact):", hist)
     sum_hist = np.sum(hist)
     hist = hist/sum_hist*100
@@ -113,9 +114,11 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     plt.yticks(np.arange(0, np.max(hist)+1, 5.))
     plt.savefig('hist_'+ str(iteration) +'.png')
     #plt.show()
+    plt.clf()
+    plt.cla()
 
     # Store confusion matrix
-    plt.plot()
+    plt.figure(2)
     cm = confusion_matrix(test_labels, pred_labels)
     cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
     df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
@@ -124,6 +127,8 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     sn.heatmap(df_cm, annot=True, cmap="Blues")
     plt.savefig('conf_mat' + str(iteration) + '.png', bbox_inches='tight')
     #plt.show()
+    plt.clf()
+    plt.cla()
     
     model.train()
     return hist, pred_labels, test_labels

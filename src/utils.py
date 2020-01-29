@@ -125,54 +125,69 @@ def get_datasets():
     return np.array(S_train_images), np.array(S_train_poses), np.array(S_test_images), np.array(S_test_poses), np.array(S_db_images), np.array(S_db_poses)
 
 
+def shuffle_triplets(triplets):
+    tmp = list()
+    num_triplets = int(len(triplets)/3)   
+    for i in range(num_triplets):
+        tmp.append([triplets[3*i], triplets[3*i+1], triplets[3*i+2]])   
+    tmp = np.array(tmp)
+    np.random.shuffle(tmp)
+    tmp = np.reshape(tmp, (-1, 64, 64, 3))   
+    return tmp
+
 def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=False):
     # initialize empty lists to generate triplets
     triplet_images = []
     triplet_poses = []
-    
     num_class, num_images = train_images.shape[0:2]
-    train_size = num_class * num_images
+    triplet_counter = 0
 
-    for j in range(train_size):
-        diff_min = 10^8
-        idx = 0
-        # generate random indices
-        random_class = np.random.randint(0, len(train_images))
-        random_Img = np.random.randint(0, len(train_images[0]))
-        # save random anchor image of the train database
-        anchor_image = train_images[random_class][random_Img]
-        anchor_pose = train_poses[random_class][random_Img]
-        
-        # find closest image of the S_db of the same class
-        for i in range(len(db_images[random_class])):
-            # find closest pose using given formular
-            diff = 2*np.arccos(np.abs(np.dot(anchor_pose, db_poses[random_class][i])))
-            if (diff != 0.0 and diff < diff_min):
-                diff_min = diff
-                idx = i
+    for c in range(num_class):
+        for i in range(num_images):
+            triplet_counter +=1
+            diff_min = 10^8
+            idx = 0
+            # generate random indices
+            #random_class = np.random.randint(0, len(train_images))
+            #random_Img = np.random.randint(0, len(train_images[0]))
+            #c = random_class
+            #i = random_Img
+            # save random anchor image of the train database
+            anchor_image = train_images[c][i]
+            anchor_pose = train_poses[c][i]
 
-        puller_image = db_images[random_class][idx]
-        puller_pose = db_poses[random_class][idx]
-        
-        # take randomly another class
-        pusher_class = (random_class + np.random.randint(1, len(db_images)-1))%len(db_images)
-        # take randomly an image of the class
-        pusher_idx = np.random.randint(0, len(db_images))
-        pusher_image = db_images[pusher_class][pusher_idx]
-        pusher_pose = db_poses[pusher_class][pusher_idx]
+            # find closest image of the S_db of the same class
+            for k in range(len(db_images[c])):
+                # find closest pose using given formular
+                diff = 2*np.arccos(np.abs(np.dot(anchor_pose, db_poses[c][k])))
+                if (diff != 0.0 and diff < diff_min):
+                    diff_min = diff
+                    idx = k
 
-        triplet_images.extend([anchor_image, puller_image, pusher_image])
-        triplet_poses.extend([anchor_pose, puller_pose, pusher_pose])
-        
-        ## Plot the Anchor, Puller pusher if wanted
-        if plot:
-            fig = plt.figure()
-            for i in range(3):
-                fig.add_subplot(1, 3, i + 1)
-                img = triplet_images[j][i]
-                plt.imshow(img)
-            plt.show()
-            
+            puller_image = db_images[c][idx]
+            puller_pose = db_poses[c][idx]
+            # take randomly another class
+            pusher_class = (c + np.random.randint(1, len(db_images)-1))%len(db_images)
+            # take randomly an image of the class
+            pusher_idx = np.random.randint(0, len(db_images))
+            pusher_image = db_images[pusher_class][pusher_idx]
+            pusher_pose = db_poses[pusher_class][pusher_idx]
+            triplet_images.extend([anchor_image, puller_image, pusher_image])
+            triplet_poses.extend([anchor_pose, puller_pose, pusher_pose])
+
+    # shuffle the triplet_images
+    triplet_images = shuffle_triplets(triplet_images)
+    for l in range(num_class*num_images):
+            ## Plot the Anchor, Puller pusher if wanted
+            if plot:
+                fig = plt.figure()
+                for j in range(3):
+                    fig.add_subplot(1, 3, j + 1)
+                    triplet_idx = (l)*3 + j
+                    img = triplet_images[triplet_idx]
+                    plt.imshow(img)
+                plt.show()
+
     '''NOTE: delete anchor_image and pose of S_train_images and S_train_poses locally --> not the same pic twice'''
     # train_size * 3 x Height x Width x Channel
     return np.array(triplet_images)
