@@ -1,5 +1,8 @@
 from model import *
 from utils import *
+from sklearn.metrics import confusion_matrix
+import seaborn as sn
+import pandas as pd
 
 
 BUILD_DATASET = False
@@ -7,7 +10,7 @@ BATCH_SIZE = 32
 BATCH_SIZE_TEST = 32
 BATCH_SIZE_DB = 32
 NUM_EPOCHS = 10
-TRAIN = True
+TRAIN = False
 LABELS = {
     0: "ape",
     1: "benchvise",
@@ -69,7 +72,8 @@ def get_histogram(model, device, test_loader, db_loader):
     # TODO: Accuracy calculation will be removed (#)
     hist = np.zeros(4)
     correct = 0.0  #
-    total = len(matches)  #
+    total = len(matches)
+    predLabels = []
     for match in matches:
         print("\nTest Index (queryIndex): {} - Actual Label for Test: {} ({})\n".format(match.queryIdx, test_labels[match.queryIdx], LABELS[test_labels[match.queryIdx]]),
                 "GT Index (trainIndex): {} - Predicted Label for Test: {} ({})\n".format(match.trainIdx, db_labels[match.trainIdx], LABELS[db_labels[match.trainIdx]]),
@@ -87,6 +91,9 @@ def get_histogram(model, device, test_loader, db_loader):
                 hist[3] += 1
 
             correct += 1 #
+        
+        predLabels.append(db_labels[match.trainIdx])
+    predLabels = np.array(predLabels)
     acc = correct / total  #
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
     print("Histogram:", hist)
@@ -111,7 +118,7 @@ def get_histogram(model, device, test_loader, db_loader):
     
     
     model.train()
-    return hist
+    return hist, predLabels, test_labels
 
 def train(model, optim, loss_fn, device,
           train_loader, test_loader, db_loader, 
@@ -164,7 +171,7 @@ def train(model, optim, loss_fn, device,
             if global_iter_count % draw_hist_at == 0:
                 print("[Total iterations {}/{}] loss: {}\n".format(global_iter_count, total_global_iter, loss.item()),
                       "Calculating histogram...", sep="")
-                get_histogram(model, device, test_loader, db_loader)
+                get_histogram(model, device, test_loader, db_loader)[0]
             global_iter_count += 1
 
 def main():
@@ -207,7 +214,20 @@ def main():
         
     else:
         model = torch.load('../models/triplet.model')
-        get_histogram(model, device, test_loader, db_loader)
+        hist, predLabels, trueClass = get_histogram(model, device, test_loader, db_loader)
+        
+        #Check for same size of the lists
+        if(len(predLabels) != len(trueClass)):
+            print("Unequal shape for Confusion Matrix! Predictions: {}, Truth: {}".format(len(predLabels), len(trueClass)))
+        else: # print the confusion matrix
+            cm = confusion_matrix(trueClass, predLabels)
+            cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
+            df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
+            print(df_cm)
+            plt.figure(figsize = (10, 7))
+            sn.heatmap(df_cm, annot=True, cmap="Blues")
+            # print("Saving the image in follwing path: {}".format(base_folder))
+            #plt.savefig('confusion_m_' + str(TOTAL_ITER) + '.png', bbox_inches='tight')
  
 if __name__ == "__main__":
     main()
