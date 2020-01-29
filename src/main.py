@@ -10,7 +10,8 @@ BATCH_SIZE = 32
 BATCH_SIZE_TEST = 32
 BATCH_SIZE_DB = 32
 NUM_EPOCHS = 10
-TRAIN = False
+NUM_WORKERS = 0
+TRAIN = True
 LABELS = {
     0: "ape",
     1: "benchvise",
@@ -80,7 +81,6 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
                 "Distance: {}".format(match.distance), sep="")  #
         if test_labels[match.queryIdx] == db_labels[match.trainIdx]:
             angle_diff = angle_between(test_poses[match.queryIdx], db_poses[match.trainIdx])
-            # TODO: Fix error in angle differences
             if angle_diff < 10:
                 hist[0] += 1
             if angle_diff < 20:
@@ -96,14 +96,14 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     pred_labels = np.array(pred_labels)
     acc = correct / total  #
     print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
-    print("Histogram:", hist)
     
-    angle_labels = ['<10°', '<20', '<40', '<180']
-
+    # Store histogram
+    plt.plot()
+    print("Histogram values (exact):", hist)
     sum_hist = np.sum(hist)
     hist = hist/sum_hist*100
-    
-    x_pos = [i for i, _ in enumerate(angle_labels)]
+    print("Histogram values (percentage):", hist)
+    x_pos = list(range(4))
     plt.style.use('ggplot')
     plt.bar(x_pos, hist, color='blue')
     plt.xlabel("Angles, $^\circ$")
@@ -112,14 +112,25 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     plt.xticks(x_pos, ('<10$^\circ$', '<20$^\circ$', '<40$^\circ$', '<180$^\circ$'))
     plt.yticks(np.arange(0, np.max(hist)+1, 5.))
     plt.savefig('hist_'+ str(iteration) +'.png')
-    plt.show()
+    #plt.show()
+
+    # Store confusion matrix
+    plt.plot()
+    cm = confusion_matrix(test_labels, pred_labels)
+    cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
+    df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
+    print(df_cm)
+    plt.figure(figsize = (10, 7))
+    sn.heatmap(df_cm, annot=True, cmap="Blues")
+    plt.savefig('conf_mat' + str(iteration) + '.png', bbox_inches='tight')
+    #plt.show()
     
     model.train()
     return hist, pred_labels, test_labels
 
 def train(model, optim, loss_fn, device,
           train_loader, test_loader, db_loader, 
-          num_epochs=10, log_at=10, draw_hist_at=1000):
+          num_epochs=10, log_at=10, draw_hist_at=100):
     
     total_iter = len(train_loader)
     total_global_iter = total_iter * num_epochs
@@ -154,19 +165,19 @@ def main():
     train_loader = DataLoader(train_dataset, 
                               batch_size=BATCH_SIZE*3,
                               shuffle=False, 
-                              num_workers=0)
+                              num_workers=NUM_WORKERS)
 
     db_dataset = CustomDataset(type="db", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     db_loader = DataLoader(db_dataset, 
                            batch_size=BATCH_SIZE_TEST,
                            shuffle=False,
-                           num_workers=0)
+                           num_workers=NUM_WORKERS)
 
     test_dataset = CustomDataset(type="test", build=False, copy_from=train_dataset) # Do not build or load, take data from train_dataset without recomputing
     test_loader = DataLoader(test_dataset, 
                              batch_size=BATCH_SIZE_DB,
                              shuffle=False, 
-                             num_workers=0)
+                             num_workers=NUM_WORKERS)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device in use:", device)
@@ -189,20 +200,7 @@ def main():
         
     else:
         model = torch.load('../models/triplet.model')
-        hist, pred_labels, true_class = get_histogram(model, device, test_loader, db_loader, 0)
-        
-        #Check for same size of the lists
-        if(len(pred_labels) != len(true_class)):
-            print("Unequal shape for Confusion Matrix! Predictions: {}, Truth: {}".format(len(pred_labels), len(true_class)))
-        else: # print the confusion matrix
-            cm = confusion_matrix(true_class, pred_labels)
-            cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
-            df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
-            print(df_cm)
-            plt.figure(figsize = (10, 7))
-            sn.heatmap(df_cm, annot=True, cmap="Blues")
-            # print("Saving the image in follwing path: {}".format(base_folder))
-            #plt.savefig('confusion_m_' + str(TOTAL_ITER) + '.png', bbox_inches='tight')
+        get_histogram(model, device, test_loader, db_loader, 0)
  
 if __name__ == "__main__":
     main()
