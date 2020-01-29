@@ -31,7 +31,6 @@ class TripletNet(nn.Module):
     x = self.layers(x)
     return x
 
-# TODO: Check here!
 def triplet_pair_loss(triplet_batch):
   batch_size = triplet_batch.shape[0]      # BS: batch_size
   diff_pos = triplet_batch[0:batch_size:3] - triplet_batch[1:batch_size:3]
@@ -52,16 +51,3 @@ def normalize(tensor):
   mean = np.mean(tensor, axis=(0,1))
   std = np.std(tensor, axis=(0,1))
   return (tensor - mean) / std
-
-# def confusion_matrix():
-#TODO:
-#   flights = sns.load_dataset("flights") # Pandas instance
-#   flights = flights.pivot("month", "year", "passengers") # Row, col, val
-#   ax = sns.heatmap(flights, annot=True, annot_kws={"fontsize":5}, fmt="d") # Annotate cells with ints
-#   print(ax)
-#   plt.show()
-
-# def match():
-#TODO:
-#   bf = cv2.BFMatcher()
-#   matches = bf.knnMatch(des1, des2, k=2)

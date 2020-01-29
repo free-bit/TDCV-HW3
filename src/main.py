@@ -1,16 +1,18 @@
 from model import *
 from utils import *
-from sklearn.metrics import confusion_matrix
-import seaborn as sn
+
+import cv2
 import pandas as pd
+import seaborn as sn
+from sklearn.metrics import confusion_matrix
 
 
-BUILD_DATASET = True
+BUILD_DATASET = False
 BATCH_SIZE = 32
 BATCH_SIZE_TEST = 32
 BATCH_SIZE_DB = 32
-NUM_EPOCHS = 5
-NUM_WORKERS = 0
+NUM_EPOCHS = 10
+NUM_WORKERS = 4
 TRAIN = True
 LABELS = {
     0: "ape",
@@ -28,7 +30,7 @@ def angle_between(v1, v2):
     # Get angle
     return (2*np.arccos(np.abs(np.dot(unit_v1, unit_v2)))) *180/np.pi
 
-def get_histogram(model, device, test_loader, db_loader, iteration):
+def get_histogram(model, device, test_loader, db_loader, iteration, verbose=False):
     model.eval()
 
     # NOTE: Due to OOM, full-batch was infeasible. Instead, mini-batches are used, with torch.no_grad() blocks added and results of batched are concatenated.
@@ -70,15 +72,16 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     matches = bf.match(test_preds, db_preds)              # BFMatcher finds exactly one match for each query from test_preds
     matches = sorted(matches, key = lambda x: x.queryIdx) # queryIdx refers to index of test_preds, trainIdx refers to index of db_preds
 
-    # TODO: Accuracy calculation will be removed (#)
     hist = np.zeros(4)
-    correct = 0.0  #
-    total = len(matches)
+    correct = 0.0        # Used only in verbose mode
+    total = len(matches) # Used only in verbose mode
     pred_labels = []
     for match in matches:
-        print("\nTest Index (queryIndex): {} - Actual Label for Test: {} ({})\n".format(match.queryIdx, test_labels[match.queryIdx], LABELS[test_labels[match.queryIdx]]),
-                "GT Index (trainIndex): {} - Predicted Label for Test: {} ({})\n".format(match.trainIdx, db_labels[match.trainIdx], LABELS[db_labels[match.trainIdx]]),
-                "Distance: {}".format(match.distance), sep="")  #
+        pred_labels.append(db_labels[match.trainIdx])
+        if verbose:
+            print("\nTest Index (queryIndex): {} - Actual Label for Test: {} ({})\n".format(match.queryIdx, test_labels[match.queryIdx], LABELS[test_labels[match.queryIdx]]),
+                    "GT Index (trainIndex): {} - Predicted Label for Test: {} ({})\n".format(match.trainIdx, db_labels[match.trainIdx], LABELS[db_labels[match.trainIdx]]),
+                    "Distance: {}".format(match.distance), sep="") 
         if test_labels[match.queryIdx] == db_labels[match.trainIdx]:
             angle_diff = angle_between(test_poses[match.queryIdx], db_poses[match.trainIdx])
             if angle_diff < 10:
@@ -90,16 +93,16 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
             if angle_diff < 180:
                 hist[3] += 1
 
-            correct += 1 #
-        
-        pred_labels.append(db_labels[match.trainIdx])
+            correct += 1
+
     pred_labels = np.array(pred_labels)
-    acc = correct / total  #
-    print("\nAccuracy: {} ({}/{})".format(acc, correct, total))  #
+    if verbose:
+        acc = correct / total
+        print("\nAccuracy: {} ({}/{})".format(acc, correct, total))
     
     # Store histogram
     plt.figure(1)
-    plt.grid(axis='y')
+    plt.grid(True)
     print("Histogram values (exact):", hist)
     sum_hist = np.sum(hist)
     hist = hist/sum_hist*100
@@ -109,7 +112,7 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     plt.bar(x_pos, hist, color='blue')
     plt.xlabel("Angles, $^\circ$")
     plt.ylabel("Percentage, %")
-    plt.title("Angle histogram")
+    plt.title("Angle histogram at iteration: " + str(iteration))
     plt.xticks(x_pos, ('<10$^\circ$', '<20$^\circ$', '<40$^\circ$', '<180$^\circ$'))
     plt.yticks(np.arange(0, np.max(hist)+1, 5.))
     plt.savefig('hist_'+ str(iteration) +'.png')
@@ -122,9 +125,9 @@ def get_histogram(model, device, test_loader, db_loader, iteration):
     cm = confusion_matrix(test_labels, pred_labels)
     cm = (cm / cm.astype(np.float).sum(axis=1)) * 100 # normalize to get % of the confusion matrix
     df_cm = pd.DataFrame(cm, index = [i for i in LABELS.values()], columns = [i for i in LABELS.values()])
-    print(df_cm)
+    print("Confusion matrix:\n", df_cm, sep="")
     plt.figure(figsize = (10, 7))
-    sn.heatmap(df_cm, annot=True, cmap="Blues")
+    sn.heatmap(df_cm, annot=True, cmap="Blues").set_title('Confusion Matrix at iteration: ' + str(iteration))
     plt.savefig('conf_mat' + str(iteration) + '.png', bbox_inches='tight')
     #plt.show()
     plt.clf()

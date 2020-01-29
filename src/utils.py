@@ -2,10 +2,6 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib import image
-import cv2
-#from sklearn.metrics import confusion_matrix
-# import seaborn as sn
-# import pandas as pd
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -31,20 +27,20 @@ def convert_full_batch_poses(data):
 
 def get_images(dataset):
     class_index = 0
-    # iterate over all classes
+    # Iterate over all classes
     imag = list()
     for label in class_folders:
-        # get filenames
+        # Get filenames
         files = os.listdir('../dataset/'+dataset+'/' + label + '/')
-        # filter all png images
+        # Filter all png images
         files = list(filter(lambda x: x.endswith('.png'), files))
-        # generate empty list of size [classes, pictures of class]
+        # Generate empty list of size [classes, pictures of class]
         tmp = [None]*len(files)
-        # iterate over files
+        # Iterate over files
         for file in files:
-            # filter index of file
+            # Filter index of file
             index=int(file.split('.png')[0].split(dataset)[1])
-            # save image at corresponding position
+            # Save image at corresponding position
             tmp[index] = image.imread('../dataset/'+dataset+'/' + label + '/' + file)
         imag.append(tmp)
         class_index+=1
@@ -52,17 +48,13 @@ def get_images(dataset):
 
 def get_poses(dataset):
     class_index = 0
-    # iterate over all classes
+    # Iterate over all classes
     poses = list()
     for label in class_folders:
         filepath = '../dataset/'+dataset+'/' + label + '/poses.txt'
-        #num_images = len(list(filter(lambda x: x.endswith('.png'), os.listdir('../dataset/'+dataset+'/' + label + '/'))))
-        # generate empty list of size [classes, pictures of class]
-        #tmp = [None]*num_images
         pose = list()
         file = open(filepath, "r")
         modulo = 1
-        #index = 0
         for line in file: 
             if modulo%2 == 0:
                 tmp = line.split()
@@ -90,7 +82,7 @@ def get_datasets():
     S_test_images = [list(), list(), list(), list(), list()]
     S_test_poses = [list(), list(), list(), list(), list()]
     
-    # get indices to split real data in training and test data
+    # Get indices to split real data in training and test data
     training_split_indices = list()
     filepath = '../dataset/real/training_split.txt'
     file = open(filepath, 'r')
@@ -100,21 +92,20 @@ def get_datasets():
             i = int(i)
             training_split_indices.append(i)
     
-    # distribute real images into train and test datasets with respect to split indices
+    # Distribute real images into train and test datasets with respect to split indices
     for i in range(len(images_real[0])):
-        # image belongs to training set
+        # Image belongs to training set
         if i in training_split_indices:
-            #print('yes')
             for j in range(len(images_real)):
                 S_train_images[j].append(images_real[j][i])
                 S_train_poses[j].append(poses_real[j][i])
-        # image belongs to test set
+        # Image belongs to test set
         else:
             for j in range(len(images_real)):
                 S_test_images[j].append(images_real[j][i])
                 S_test_poses[j].append(poses_real[j][i])
 
-    # append all fine images to train dataset
+    # Append all fine images to train dataset
     num_classes = len(images_fine)
     # Take all images under i-th class from the "fine" set and extend the corresponding class under train dataset with them
     for i in range(num_classes):
@@ -136,7 +127,7 @@ def shuffle_triplets(triplets):
     return tmp
 
 def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=False):
-    # initialize empty lists to generate triplets
+    # Initialize empty lists to generate triplets
     triplet_images = []
     triplet_poses = []
     num_class, num_images = train_images.shape[0:2]
@@ -147,18 +138,12 @@ def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=F
             triplet_counter +=1
             diff_min = 10^8
             idx = 0
-            # generate random indices
-            #random_class = np.random.randint(0, len(train_images))
-            #random_Img = np.random.randint(0, len(train_images[0]))
-            #c = random_class
-            #i = random_Img
-            # save random anchor image of the train database
             anchor_image = train_images[c][i]
             anchor_pose = train_poses[c][i]
 
-            # find closest image of the S_db of the same class
+            # Find closest image of the S_db of the same class
             for k in range(len(db_images[c])):
-                # find closest pose using given formular
+                # Find closest pose using given formular
                 diff = 2*np.arccos(np.abs(np.dot(anchor_pose, db_poses[c][k])))
                 if (diff != 0.0 and diff < diff_min):
                     diff_min = diff
@@ -166,19 +151,19 @@ def generate_all_triplets(train_images, train_poses, db_images, db_poses, plot=F
 
             puller_image = db_images[c][idx]
             puller_pose = db_poses[c][idx]
-            # take randomly another class
+            # Take randomly another class
             pusher_class = (c + np.random.randint(1, len(db_images)-1))%len(db_images)
-            # take randomly an image of the class
+            # Take randomly an image of the class
             pusher_idx = np.random.randint(0, len(db_images))
             pusher_image = db_images[pusher_class][pusher_idx]
             pusher_pose = db_poses[pusher_class][pusher_idx]
             triplet_images.extend([anchor_image, puller_image, pusher_image])
             triplet_poses.extend([anchor_pose, puller_pose, pusher_pose])
 
-    # shuffle the triplet_images
+    # Shuffle the triplet_images
     triplet_images = shuffle_triplets(triplet_images)
     for l in range(num_class*num_images):
-            ## Plot the Anchor, Puller pusher if wanted
+            # Plot the anchor, puller, pusher if wanted
             if plot:
                 fig = plt.figure()
                 for j in range(3):
