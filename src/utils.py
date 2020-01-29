@@ -219,12 +219,19 @@ class CustomDataset(Dataset):
                 print("Dataset saved.")
 
             # Load from a file
-            else: 
+            else:
+                # NOTE: Do not assume a specific order for keys in python dicts!
                 print("Loading dataset...")
                 data = np.load("data.npz")
-                self.train_triplets, self.S_train_images, self.S_train_poses,\
-                self.S_test_images, self.S_test_labels, self.S_test_poses,\
-                self.S_db_images, self.S_db_labels, self.S_db_poses = data.values()
+                self.train_triplets = data["train_triplets"]
+                self.S_train_images = data["S_train_images"]
+                self.S_train_poses = data["S_train_poses"]
+                self.S_test_images = data["S_test_images"]
+                self.S_test_labels = data["S_test_labels"]
+                self.S_test_poses = data["S_test_poses"]
+                self.S_db_images = data["S_db_images"]
+                self.S_db_labels = data["S_db_labels"]
+                self.S_db_poses = data["S_db_poses"]
                 print("Dataset loaded.")
 
         # Load from an object
